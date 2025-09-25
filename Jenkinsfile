@@ -94,9 +94,7 @@ pipeline {
               grep -q '"status":"UP"' health.json
             '''
           } else {
-            // Windows: stop all node processes by name, start app, fetch health.json
             bat 'powershell -NoProfile -Command "Get-Process -Name node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; $proc = Start-Process node -ArgumentList ''server.js'' -PassThru -WindowStyle Hidden; Set-Content -Encoding ascii app.pid $proc.Id; Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '''' | Set-Content -Encoding ascii health.json }"'
-            // Gate: parse JSON and fail if status != 'UP'
             bat 'powershell -NoProfile -Command "$c = Get-Content -Raw health.json | ConvertFrom-Json; if ($c.status -eq ''UP'') { exit 0 } else { Write-Host ''HEALTH BAD:''; Write-Host ($c | ConvertTo-Json -Compress); exit 1 }"'
           }
         }
