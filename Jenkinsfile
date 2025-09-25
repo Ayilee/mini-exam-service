@@ -12,18 +12,18 @@ pipeline {
 
   stages {
     stage('Checkout') {
-      steps { 
-        checkout scm 
+      steps {
+        checkout scm
       }
     }
 
     stage('Install') {
       steps {
         script {
-          if (isUnix()) { 
-            sh 'npm ci || npm install' 
-          } else { 
-            bat 'npm ci || npm install' 
+          if (isUnix()) {
+            sh 'npm ci || npm install'
+          } else {
+            bat 'npm ci || npm install'
           }
         }
       }
@@ -32,10 +32,10 @@ pipeline {
     stage('Test') {
       steps {
         script {
-          if (isUnix()) { 
-            sh 'npm test' 
-          } else { 
-            bat 'npm test' 
+          if (isUnix()) {
+            sh 'npm test'
+          } else {
+            bat 'npm test'
           }
         }
       }
@@ -44,10 +44,10 @@ pipeline {
     stage('Code Quality') {
       steps {
         script {
-          if (isUnix()) { 
-            sh 'npx eslint .' 
-          } else { 
-            bat 'npx eslint .' 
+          if (isUnix()) {
+            sh 'npx eslint .'
+          } else {
+            bat 'npx eslint .'
           }
         }
       }
@@ -94,10 +94,10 @@ pipeline {
               grep -q '"status":"UP"' health.json
             '''
           } else {
-            // Stop all node processes by name, start server.js, get health endpoint JSON
-            bat 'powershell -NoProfile -Command "Get-Process -Name node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; $proc = Start-Process node -ArgumentList ''server.js'' -PassThru -WindowStyle Hidden; Set-Content -Encoding ascii app.pid $proc.Id; Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '''' | Set-Content -Encoding ascii health.json }"'
-            // Fail build if health status is not UP by parsing JSON
-            bat 'powershell -NoProfile -Command "$c = Get-Content -Raw health.json | ConvertFrom-Json; if ($c.status -eq ''UP'') { exit 0 } else { Write-Host ''HEALTH BAD:''; Write-Host ($c | ConvertTo-Json -Compress); exit 1 }"'
+            // Start app and fetch health.json (double-quoted Groovy; escape " and $ inside)
+            bat "powershell -NoProfile -Command \"Get-Process -Name node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; \$proc = Start-Process node -ArgumentList 'server.js' -PassThru -WindowStyle Hidden; Set-Content -Encoding ascii app.pid \$proc.Id; Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '' | Set-Content -Encoding ascii health.json }\""
+            // Gate: parse JSON and fail if status not 'UP'
+            bat "powershell -NoProfile -Command \"\$c = Get-Content -Raw health.json | ConvertFrom-Json; if (\$c.status -eq 'UP') { exit 0 } else { Write-Host 'HEALTH BAD:'; Write-Host (\$c | ConvertTo-Json -Compress); exit 1 }\""
           }
         }
       }
@@ -119,7 +119,7 @@ pipeline {
   }
 
   post {
-    always { 
+    always {
       cleanWs()
     }
   }
