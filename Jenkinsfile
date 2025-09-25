@@ -12,19 +12,14 @@ pipeline {
 
   stages {
     stage('Checkout') {
-      steps {
-        checkout scm
-      }
+      steps { checkout scm }
     }
 
     stage('Install') {
       steps {
         script {
-          if (isUnix()) {
-            sh 'npm ci || npm install'
-          } else {
-            bat 'npm ci || npm install'
-          }
+          if (isUnix()) { sh 'npm ci || npm install' }
+          else { bat 'npm ci || npm install' }
         }
       }
     }
@@ -32,11 +27,8 @@ pipeline {
     stage('Test') {
       steps {
         script {
-          if (isUnix()) {
-            sh 'npm test'
-          } else {
-            bat 'npm test'
-          }
+          if (isUnix()) { sh 'npm test' }
+          else { bat 'npm test' }
         }
       }
     }
@@ -44,11 +36,8 @@ pipeline {
     stage('Code Quality') {
       steps {
         script {
-          if (isUnix()) {
-            sh 'npx eslint .'
-          } else {
-            bat 'npx eslint .'
-          }
+          if (isUnix()) { sh 'npx eslint .' }
+          else { bat 'npx eslint .' }
         }
       }
     }
@@ -90,14 +79,12 @@ pipeline {
               sleep 2
               curl -s http://localhost:3000/health > health.json || true
               echo "HEALTH: $(cat health.json)"
-              # Fail if health not UP
               grep -q '"status":"UP"' health.json
             '''
           } else {
-            // Start app and fetch health.json (double-quoted Groovy; escape $ inside)
-            bat "powershell -NoProfile -Command \"Get-Process -Name node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; \$proc = Start-Process node -ArgumentList 'server.js' -PassThru -WindowStyle Hidden; Set-Content -Encoding ascii app.pid \$proc.Id; Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '' | Set-Content -Encoding ascii health.json }\""
-            // Gate: parse JSON and fail if status not 'UP'
-            bat "powershell -NoProfile -Command \"\$c = Get-Content -Raw health.json | ConvertFrom-Json; if (\$c.status -eq 'UP') { exit 0 } else { Write-Host 'HEALTH BAD:'; Write-Host (\$c | ConvertTo-Json -Compress); exit 1 }\""
+            // Start app and fetch health.json (IMPORTANT: escape $ for Groovy)
+            bat "powershell -NoProfile -Command \"Get-Process -Name node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; \\$proc = Start-Process node -ArgumentList 'server.js' -PassThru -WindowStyle Hidden; Set-Content -Encoding ascii app.pid \\$proc.Id; Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '' | Set-Content -Encoding ascii health.json }\""
+            bat "powershell -NoProfile -Command \"\\$c = Get-Content -Raw health.json | ConvertFrom-Json; if (\\$c.status -eq 'UP') { exit 0 } else { Write-Host 'HEALTH BAD:'; Write-Host (\\$c | ConvertTo-Json -Compress); exit 1 }\""
           }
         }
       }
@@ -105,15 +92,17 @@ pipeline {
         always {
           script {
             if (isUnix()) {
-              // two single-line sh commands, each fully quoted
-              sh 'if [ -f app.pid ]; then kill "$(cat app.pid)" 2>/dev/null || true; fi'
+              sh 'if [ -f app.pid ]; then kill \"$(cat app.pid)\" 2>/dev/null || true; fi'
               sh 'pkill -f "node server.js" || true'
             } else {
-              // Robust Windows cleanup: silence errors, always succeed
-              bat "powershell -NoProfile -Command \"$ErrorActionPreference='SilentlyContinue'; if (Test-Path app.pid) { Get-Content app.pid | ForEach-Object { Stop-Process -Id $_ -Force } }; Get-Process node | Stop-Process -Force; exit 0\""
+              // Robust Windows cleanup; note the escaped $ and $_
+              bat "powershell -NoProfile -Command \"\\$ErrorActionPreference='SilentlyContinue'; if (Test-Path app.pid) { Get-Content app.pid | ForEach-Object { try { Stop-Process -Id \\$_ -Force } catch {} } }; Get-Process node | Stop-Process -Force; exit 0\""
             }
           }
           archiveArtifacts artifacts: 'jenkins-run.log,health.json', allowEmptyArchive: true
+
+          // Give Windows a tiny pause so file locks release
+          script { if (!isUnix()) bat 'ping -n 3 127.0.0.1 >NUL' }
         }
       }
     }
@@ -121,7 +110,8 @@ pipeline {
 
   post {
     always {
-      cleanWs()
+      // Don’t fail the whole build if Windows can’t delete instantly
+      cleanWs(deleteDirs: true, notFailBuild: true)
     }
   }
 }
