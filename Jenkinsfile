@@ -85,14 +85,12 @@ pipeline {
             // fail stage if health not UP
             sh 'grep -q \\"status\\":\\"UP\\" health.json'
           } else {
-            // Windows PowerShell (single-line; no ^ carets)
-            bat 'powershell -NoProfile -Command "$p=(Get-Process node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like ''*\\node.exe'' }); if($p){ $p | Stop-Process -Force -ErrorAction SilentlyContinue }; $proc=Start-Process node -ArgumentList ''server.js'' -PassThru -WindowStyle Hidden; Set-Content -Encoding ascii app.pid $proc.Id; Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '''' | Set-Content -Encoding ascii health.json }"'
-            // fail stage if health not UP
-            bat '''
-              findstr /C:"\\"status\\":\\"UP\\"" health.json > NUL
-              if errorlevel 1 exit /b 1
-            '''
-          }
+  // Windows PowerShell (single-line; no carets)
+  bat 'powershell -NoProfile -Command "$p=(Get-Process node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like ''*\\node.exe'' }); if($p){ $p | Stop-Process -Force -ErrorAction SilentlyContinue }; $proc=Start-Process node -ArgumentList ''server.js'' -PassThru -WindowStyle Hidden; Set-Content -Encoding ascii app.pid $proc.Id; Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '''' | Set-Content -Encoding ascii health.json }"'
+
+  // Fail stage if health not UP (PowerShell regex on JSON)
+  bat 'powershell -NoProfile -Command "$c = Get-Content -Raw health.json; if ($c -match ''\"status\"\\s*:\\s*\"UP\"'') { exit 0 } else { Write-Host ''HEALTH BAD:''; Write-Host $c; exit 1 }"'
+}
         }
       }
       post {
