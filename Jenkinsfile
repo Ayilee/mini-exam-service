@@ -2,6 +2,7 @@ pipeline {
   agent any
 
   tools {
+    // Requires the NodeJS plugin and a tool named exactly: Node20 (auto)
     nodejs 'Node20 (auto)'
   }
 
@@ -58,7 +59,7 @@ pipeline {
     stage('Security (quick audit)') {
       steps {
         script {
-          // Mark UNSTABLE (yellow) if high vulns appear, don’t fail the whole build
+          // Mark UNSTABLE if high vulns appear (don’t fail whole build)
           def status = isUnix()
             ? sh(script: 'npm audit --audit-level=high', returnStatus: true)
             : bat(script: 'npm audit --audit-level=high', returnStatus: true)
@@ -74,32 +75,18 @@ pipeline {
         script {
           if (isUnix()) {
             sh '''
-              # stop any previous run
               pkill -f "node server.js" || true
-
-              # start app in background and write PID
               nohup node server.js > jenkins-run.log 2>&1 &
               echo $! > app.pid
-
-              # give it a moment
               sleep 2
-
-              # health check
               curl -s http://localhost:3000/health > health.json || true
               echo "HEALTH: $(cat health.json)"
             '''
             // fail stage if health not UP
             sh 'grep -q \\"status\\":\\"UP\\" health.json'
           } else {
-            // Windows PowerShell
-            bat '''
-        // Windows PowerShell (single-line; no ^ carets)
+            // Windows PowerShell (single-line; no ^ carets)
             bat 'powershell -NoProfile -Command "$p=(Get-Process node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like ''*\\node.exe'' }); if($p){ $p | Stop-Process -Force -ErrorAction SilentlyContinue }; $proc=Start-Process node -ArgumentList ''server.js'' -PassThru -WindowStyle Hidden; Set-Content -Encoding ascii app.pid $proc.Id; Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '''' | Set-Content -Encoding ascii health.json }"'
-            // fail stage if health not UP
-            bat '''
-              findstr /C:"\\"status\\":\\"UP\\"" health.json > NUL
-              if errorlevel 1 exit /b 1
-            '''
             // fail stage if health not UP
             bat '''
               findstr /C:"\\"status\\":\\"UP\\"" health.json > NUL
@@ -117,10 +104,7 @@ pipeline {
                 pkill -f "node server.js" || true
               '''
             } else {
-              bat '''
-                if exist app.pid for /f %%p in (app.pid) do taskkill /PID %%p /F >NUL 2>&1
-                taskkill /IM node.exe /F >NUL 2>&1
-              '''
+              bat 'powershell -NoProfile -Command "if (Test-Path app.pid) { Get-Content app.pid | ForEach-Object { try { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } catch {} } }; Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"'
             }
           }
           archiveArtifacts artifacts: 'jenkins-run.log,health.json', allowEmptyArchive: true
