@@ -2,7 +2,6 @@ pipeline {
   agent any
 
   tools {
-    // Requires the NodeJS plugin with a tool named exactly: Node20 (auto)
     nodejs 'Node20 (auto)'
   }
 
@@ -13,14 +12,19 @@ pipeline {
 
   stages {
     stage('Checkout') {
-      steps { checkout scm }
+      steps { 
+        checkout scm 
+      }
     }
 
     stage('Install') {
       steps {
         script {
-          if (isUnix()) { sh 'npm ci || npm install' }
-          else { bat 'npm ci || npm install' }
+          if (isUnix()) { 
+            sh 'npm ci || npm install' 
+          } else { 
+            bat 'npm ci || npm install' 
+          }
         }
       }
     }
@@ -28,8 +32,11 @@ pipeline {
     stage('Test') {
       steps {
         script {
-          if (isUnix()) { sh 'npm test' }
-          else { bat 'npm test' }
+          if (isUnix()) { 
+            sh 'npm test' 
+          } else { 
+            bat 'npm test' 
+          }
         }
       }
     }
@@ -37,8 +44,11 @@ pipeline {
     stage('Code Quality') {
       steps {
         script {
-          if (isUnix()) { sh 'npx eslint .' }
-          else { bat 'npx eslint .' }
+          if (isUnix()) { 
+            sh 'npx eslint .' 
+          } else { 
+            bat 'npx eslint .' 
+          }
         }
       }
     }
@@ -59,7 +69,6 @@ pipeline {
     stage('Security (quick audit)') {
       steps {
         script {
-          // Mark UNSTABLE if high vulns appear (don’t fail whole build)
           def status = isUnix()
             ? sh(script: 'npm audit --audit-level=high', returnStatus: true)
             : bat(script: 'npm audit --audit-level=high', returnStatus: true)
@@ -85,9 +94,8 @@ pipeline {
               grep -q '"status":"UP"' health.json
             '''
           } else {
-            // Windows: run app, hit /health, then gate on JSON
-            bat 'powershell -NoProfile -Command "$p=(Get-Process node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like ''*\\node.exe'' }); if($p){ $p | Stop-Process -Force -ErrorAction SilentlyContinue }; $proc=Start-Process node -ArgumentList ''server.js'' -PassThru -WindowStyle Hidden; Set-Content -Encoding ascii app.pid $proc.Id; Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '''' | Set-Content -Encoding ascii health.json }"'
-            bat 'powershell -NoProfile -Command "$c = Get-Content -Raw health.json; if ($c -match ''\\"status\\"\\s*:\\s*\\"UP\\"'') { exit 0 } else { Write-Host ''HEALTH BAD:''; Write-Host $c; exit 1 }"'
+            bat 'powershell -NoProfile -Command "$p=(Get-Process node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like ''*\\node.exe'' }); if($p){ $p | Stop-Process -Force -ErrorAction SilentlyContinue }; $proc=Start-Process node -ArgumentList ''server.js'' -PassThru -WindowStyle Hidden; Set-Content -Encoding ascii app.pid $proc.Id; Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '' | Set-Content -Encoding ascii health.json }"'
+            bat 'powershell -NoProfile -Command "$c = Get-Content -Raw health.json; if ($c -match ''\"status\"\s*:\s*\"UP\"'') { exit 0 } else { Write-Host ''HEALTH BAD:''; Write-Host $c; exit 1 }"'
           }
         }
       }
@@ -112,3 +120,4 @@ pipeline {
   post {
     always { cleanWs() }
   }
+}
