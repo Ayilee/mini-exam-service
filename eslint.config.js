@@ -1,13 +1,16 @@
+// eslint.config.js — ESLint v9 flat config
+import globals from 'globals'
+
 export default [
   {
     files: ['**/*.js'],
     ignores: ['node_modules/**', 'coverage/**'],
     languageOptions: {
       ecmaVersion: 2022,
-      sourceType: 'module'
-    },
-    env: {
-      node: true
+      sourceType: 'module',
+      globals: {
+        ...globals.node, // allow Node globals (process, __dirname, etc.)
+      }
     },
     rules: {
       'no-unused-vars': ['error', { 'argsIgnorePattern': '^_' }],
@@ -18,9 +21,11 @@ export default [
   },
   {
     files: ['__tests__/**/*.js'],
-    env: {
-      node: true,
-      jest: true
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.jest // allow describe/it/expect
+      }
     }
   }
 ]
