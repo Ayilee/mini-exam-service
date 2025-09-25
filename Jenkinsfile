@@ -93,12 +93,12 @@ pipeline {
           } else {
             // Windows PowerShell
             bat '''
-              powershell -NoProfile -Command ^
-                "Get-Process -Name node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*server.js*' } | Stop-Process -Force -ErrorAction SilentlyContinue; ^
-                 $p = Start-Process node -ArgumentList 'server.js' -PassThru -WindowStyle Hidden; ^
-                 $p.Id | Out-File -Encoding ascii app.pid; ^
-                 Start-Sleep -Seconds 2; ^
-                 try { $r = Invoke-WebRequest -UseBasicParsing http://localhost:3000/health; $r.Content | Out-File -Encoding ascii health.json } catch { '' | Out-File health.json }"
+        // Windows PowerShell (single-line; no ^ carets)
+            bat 'powershell -NoProfile -Command "$p=(Get-Process node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like ''*\\node.exe'' }); if($p){ $p | Stop-Process -Force -ErrorAction SilentlyContinue }; $proc=Start-Process node -ArgumentList ''server.js'' -PassThru -WindowStyle Hidden; Set-Content -Encoding ascii app.pid $proc.Id; Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '''' | Set-Content -Encoding ascii health.json }"'
+            // fail stage if health not UP
+            bat '''
+              findstr /C:"\\"status\\":\\"UP\\"" health.json > NUL
+              if errorlevel 1 exit /b 1
             '''
             // fail stage if health not UP
             bat '''
