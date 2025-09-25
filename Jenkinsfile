@@ -94,7 +94,7 @@ pipeline {
               grep -q '"status":"UP"' health.json
             '''
           } else {
-            // Start app and fetch health.json (double-quoted Groovy; escape " and $ inside)
+            // Start app and fetch health.json (double-quoted Groovy; escape $ inside)
             bat "powershell -NoProfile -Command \"Get-Process -Name node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; \$proc = Start-Process node -ArgumentList 'server.js' -PassThru -WindowStyle Hidden; Set-Content -Encoding ascii app.pid \$proc.Id; Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '' | Set-Content -Encoding ascii health.json }\""
             // Gate: parse JSON and fail if status not 'UP'
             bat "powershell -NoProfile -Command \"\$c = Get-Content -Raw health.json | ConvertFrom-Json; if (\$c.status -eq 'UP') { exit 0 } else { Write-Host 'HEALTH BAD:'; Write-Host (\$c | ConvertTo-Json -Compress); exit 1 }\""
@@ -109,7 +109,8 @@ pipeline {
               sh 'if [ -f app.pid ]; then kill "$(cat app.pid)" 2>/dev/null || true; fi'
               sh 'pkill -f "node server.js" || true'
             } else {
-              bat 'powershell -NoProfile -Command "if (Test-Path app.pid) { Get-Content app.pid | ForEach-Object { try { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } catch {} } }; Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"'
+              // Robust Windows cleanup: silence errors, always succeed
+              bat "powershell -NoProfile -Command \"$ErrorActionPreference='SilentlyContinue'; if (Test-Path app.pid) { Get-Content app.pid | ForEach-Object { Stop-Process -Id $_ -Force } }; Get-Process node | Stop-Process -Force; exit 0\""
             }
           }
           archiveArtifacts artifacts: 'jenkins-run.log,health.json', allowEmptyArchive: true
