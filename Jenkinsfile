@@ -83,8 +83,8 @@ pipeline {
             '''
           } else {
             // Start app and fetch health.json (IMPORTANT: escape $ for Groovy)
-            bat "powershell -NoProfile -Command \"Get-Process -Name node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; \\$proc = Start-Process node -ArgumentList 'server.js' -PassThru -WindowStyle Hidden; Set-Content -Encoding ascii app.pid \\$proc.Id; Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '' | Set-Content -Encoding ascii health.json }\""
-            bat "powershell -NoProfile -Command \"\\$c = Get-Content -Raw health.json | ConvertFrom-Json; if (\\$c.status -eq 'UP') { exit 0 } else { Write-Host 'HEALTH BAD:'; Write-Host (\\$c | ConvertTo-Json -Compress); exit 1 }\""
+bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\start-and-health.ps1'
+bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\stop-app.ps1'
           }
         }
       }
