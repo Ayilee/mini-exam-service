@@ -105,10 +105,9 @@ pipeline {
         always {
           script {
             if (isUnix()) {
-              sh '''
-                if [ -f app.pid ]; then kill $(cat app.pid) 2>/dev/null || true; fi
-                pkill -f "node server.js" || true
-              '''
+              // two single-line sh commands, each fully quoted
+              sh 'if [ -f app.pid ]; then kill "$(cat app.pid)" 2>/dev/null || true; fi'
+              sh 'pkill -f "node server.js" || true'
             } else {
               bat 'powershell -NoProfile -Command "if (Test-Path app.pid) { Get-Content app.pid | ForEach-Object { try { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } catch {} } }; Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"'
             }
