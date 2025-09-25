@@ -68,6 +68,7 @@ pipeline {
       }
     }
 
+    // --- Drop-in Deploy block (Windows+Linux) ---
     stage('Deploy (Test)') {
       steps {
         script {
@@ -79,12 +80,14 @@ pipeline {
               sleep 2
               curl -s http://localhost:3000/health > health.json || true
               echo "HEALTH: $(cat health.json)"
+              # Fail if health not UP
               grep -q '"status":"UP"' health.json
             '''
           } else {
-            // Start app and fetch health.json (IMPORTANT: escape $ for Groovy)
-bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\start-and-health.ps1'
-bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\stop-app.ps1'
+            // Start and fetch health.json
+            bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\start-and-health.ps1'
+            // Gate: fail if status != UP
+            bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\gate-health.ps1'
           }
         }
       }
@@ -92,20 +95,17 @@ bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\stop-app.ps1'
         always {
           script {
             if (isUnix()) {
-              sh 'if [ -f app.pid ]; then kill \"$(cat app.pid)\" 2>/dev/null || true; fi'
+              sh 'if [ -f app.pid ]; then kill "$(cat app.pid)" 2>/dev/null || true; fi'
               sh 'pkill -f "node server.js" || true'
             } else {
-              // Robust Windows cleanup; note the escaped $ and $_
-              bat "powershell -NoProfile -Command \"\\$ErrorActionPreference='SilentlyContinue'; if (Test-Path app.pid) { Get-Content app.pid | ForEach-Object { try { Stop-Process -Id \\$_ -Force } catch {} } }; Get-Process node | Stop-Process -Force; exit 0\""
+              bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\stop-app.ps1'
             }
           }
           archiveArtifacts artifacts: 'jenkins-run.log,health.json', allowEmptyArchive: true
-
-          // Give Windows a tiny pause so file locks release
-          script { if (!isUnix()) bat 'ping -n 3 127.0.0.1 >NUL' }
         }
       }
     }
+    // --- End Deploy block ---
   }
 
   post {
