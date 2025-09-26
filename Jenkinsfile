@@ -26,23 +26,36 @@ pipeline {
     }
 
     stage('Test') {
-      steps {
-        script {
-          if (isUnix()) {
-            sh 'mkdir -p reports/junit'
-            sh 'JEST_JUNIT_OUTPUT=reports/junit/junit.xml npm test -- --coverage --reporters=default --reporters=jest-junit'
-          } else {
-            bat '''
-              if not exist reports\\junit mkdir reports\\junit
-              set JEST_JUNIT_OUTPUT=reports\\junit\\junit.xml
-              npm test -- --coverage --reporters=default --reporters=jest-junit
-              echo ===== Contents of reports\\junit =====
-              dir reports\\junit
-            '''
-          }
-        }
+  steps {
+    script {
+      if (isUnix()) {
+        sh '''
+          set -e
+          mkdir -p reports/junit
+          # Force reporter output path
+          JEST_JUNIT_OUTPUT=reports/junit/junit.xml \
+          npm test -- --coverage --reporters=default --reporters=jest-junit
+          # Fallback if reporter wrote to ./junit.xml
+          [ -f junit.xml ] && mv -f junit.xml reports/junit/junit.xml || true
+          echo "===== reports/junit ====="
+          ls -l reports/junit || true
+        '''
+      } else {
+        bat '''
+          if not exist reports\\junit mkdir reports\\junit
+          rem Force reporter output path in the same shell
+          set "JEST_JUNIT_OUTPUT=reports\\junit\\junit.xml"
+          npm test -- --coverage --reporters=default --reporters=jest-junit
+          rem Fallback if reporter wrote to .\\junit.xml
+          if exist junit.xml move /Y junit.xml reports\\junit\\junit.xml
+          echo ===== Contents of reports\\junit =====
+          dir reports\\junit
+        '''
       }
     }
+  }
+}
+
 
     stage('Code Quality (ESLint)') {
       steps {
