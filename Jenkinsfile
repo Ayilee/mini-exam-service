@@ -117,6 +117,51 @@ pipeline {
       }
     }
     // --- End Deploy ---
+
+    // --- Release (approval) ---
+    stage('Release (approval)') {
+      when { branch 'main' } // optional: only release from main
+      steps {
+        timeout(time: 10, unit: 'MINUTES') {
+          input message: 'Promote the current artifact to PRODUCTION?', ok: 'Release'
+        }
+        script {
+          if (isUnix()) {
+            sh 'mkdir -p releases && cp mini-exam-service.tgz releases/mini-exam-service-prod.tgz'
+          } else {
+            bat 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force releases | Out-Null; Copy-Item mini-exam-service.zip releases\\mini-exam-service-prod.zip -Force"'
+          }
+        }
+        archiveArtifacts artifacts: 'releases/**', fingerprint: true
+      }
+    }
+
+    // --- Monitoring (smoke) ---
+    stage('Monitoring (smoke)') {
+      steps {
+        script {
+          if (isUnix()) {
+            sh '''
+              rm -f monitor.log || true
+              for i in $(seq 1 4); do
+                ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health || true)
+                body=$(curl -s http://localhost:3000/health || echo '')
+                echo "$ts status:$code body:$body" >> monitor.log
+                sleep 30
+              done
+            '''
+          } else {
+            bat 'powershell -NoProfile -Command "Remove-Item -ErrorAction SilentlyContinue monitor.log; for ($i=1; $i -le 4; $i++) { $ts=(Get-Date).ToUniversalTime().ToString(''yyyy-MM-ddTHH:mm:ssZ''); try { $resp=Invoke-WebRequest -UseBasicParsing http://localhost:3000/health; $code=$resp.StatusCode.value__; $body=$resp.Content } catch { $code=0; $body=\\"\\" }; Add-Content -Encoding ascii monitor.log \\"$ts status:$code body:$body\\"; Start-Sleep -Seconds 30 }"'
+          }
+        }
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'monitor.log', allowEmptyArchive: true
+        }
+      }
+    }
   }
 
   post {
