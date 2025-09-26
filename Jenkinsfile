@@ -28,13 +28,13 @@ pipeline {
       steps {
         script {
           if (isUnix()) {
-            // Jest -> JUnit XML (needs devDep: jest-junit)
             sh 'mkdir -p reports/junit'
             sh 'JEST_JUNIT_OUTPUT=reports/junit/junit.xml npm test -- --coverage --reporters=default --reporters=jest-junit'
           } else {
-            // Windows: make folder and set env var for jest-junit output
             bat 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force reports\\junit | Out-Null"'
-            bat 'powershell -NoProfile -Command "$env:JEST_JUNIT_OUTPUT=''reports\\junit\\junit.xml''; npm test -- --coverage --reporters=default --reporters=jest-junit"'
+            withEnv(['JEST_JUNIT_OUTPUT=reports\\junit\\junit.xml']) {
+              bat 'npm test -- --coverage --reporters=default --reporters=jest-junit'
+            }
           }
         }
       }
@@ -44,15 +44,14 @@ pipeline {
       steps {
         script {
           if (isUnix()) {
-            // Keep console lint + also write Checkstyle XML for Jenkins
             sh 'mkdir -p reports/eslint'
             sh 'npx eslint . -f checkstyle -o reports/eslint/checkstyle.xml || true'
+            sh 'npx eslint .'
           } else {
             bat 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force reports\\eslint | Out-Null"'
             bat 'npx eslint . -f checkstyle -o reports\\eslint\\checkstyle.xml || exit /b 0'
+            bat 'npx eslint .'
           }
-          // (Optional) also keep plain console output:
-          if (isUnix()) { sh 'npx eslint .' } else { bat 'npx eslint .' }
         }
       }
     }
@@ -88,18 +87,17 @@ pipeline {
       steps {
         script {
           if (isUnix()) {
-            sh 'pkill -f "node server.js" || true'
-            sh 'nohup node server.js > jenkins-run.log 2>&1 &'
-            sh 'echo $! > app.pid'
-            sh 'sleep 2'
-            sh 'curl -s http://localhost:3000/health > health.json || true'
-            sh 'echo "HEALTH: $(cat health.json)"'
-            // Fail if health not UP
-            sh 'grep -q \'"status":"UP"\' health.json'
+            sh '''
+              pkill -f "node server.js" || true
+              nohup node server.js > jenkins-run.log 2>&1 &
+              echo $! > app.pid
+              sleep 2
+              curl -s http://localhost:3000/health > health.json || true
+              echo "HEALTH: $(cat health.json)"
+              grep -q '"status":"UP"' health.json
+            '''
           } else {
-            // Start and fetch health.json
             bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\start-and-health.ps1'
-            // Gate: fail if status != UP
             bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\gate-health.ps1'
           }
         }
@@ -123,12 +121,8 @@ pipeline {
 
   post {
     always {
-      // Publish test results (JUnit)
       junit testResults: 'reports/junit/junit.xml', allowEmptyResults: true
-      // Archive CI reports for evidence (JUnit + ESLint)
       archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
-
-      // Don’t fail the whole build if Windows can’t delete instantly
       cleanWs(deleteDirs: true, notFailBuild: true)
     }
   }
