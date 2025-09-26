@@ -11,6 +11,7 @@ pipeline {
   }
 
   stages {
+
     stage('Checkout') {
       steps { checkout scm }
     }
@@ -19,7 +20,7 @@ pipeline {
       steps {
         script {
           if (isUnix()) { sh 'npm ci || npm install' }
-          else { bat 'npm ci || npm install' }
+          else          { bat 'npm ci || npm install' }
         }
       }
     }
@@ -40,15 +41,18 @@ pipeline {
       }
     }
 
-    stage('Code Quality') {
+    stage('Code Quality (ESLint)') {
       steps {
         script {
           if (isUnix()) {
             sh 'mkdir -p reports/eslint'
+            // write Checkstyle XML for Jenkins & keep console output
             sh 'npx eslint . -f checkstyle -o reports/eslint/checkstyle.xml || true'
             sh 'npx eslint .'
           } else {
             bat 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force reports\\eslint | Out-Null"'
+            // ensure formatter exists; harmless if already installed
+            bat 'npm i -D eslint-formatter-checkstyle'
             bat 'npx eslint . -f checkstyle -o reports\\eslint\\checkstyle.xml || exit /b 0'
             bat 'npx eslint .'
           }
@@ -69,7 +73,7 @@ pipeline {
       }
     }
 
-    stage('Security (quick audit)') {
+    stage('Security (npm audit)') {
       steps {
         script {
           def status = isUnix()
@@ -82,7 +86,29 @@ pipeline {
       }
     }
 
-    // --- Deploy (Windows+Linux) ---
+    stage('Security (Snyk)') {
+      steps {
+        withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
+          script {
+            if (isUnix()) {
+              sh '''
+                npm i -g snyk
+                snyk auth "$SNYK_TOKEN" || true
+                snyk test --severity-threshold=high || true
+              '''
+            } else {
+              bat '''
+                call npm i -g snyk
+                call snyk auth %SNYK_TOKEN% || exit /b 0
+                call snyk test --severity-threshold=high || exit /b 0
+              '''
+            }
+          }
+        }
+      }
+    }
+
+    // Non-Docker, host test deploy (Windows uses scripts/*.ps1 you already added)
     stage('Deploy (Test)') {
       steps {
         script {
@@ -116,11 +142,77 @@ pipeline {
         }
       }
     }
-    // --- End Deploy ---
 
-    // --- Release (approval) ---
+    // Optional: Dockerized test deploy (auto-skips if Docker not installed)
+    stage('Deploy (Docker Test)') {
+      steps {
+        script {
+          def img = "mini-exam-service:${env.BUILD_NUMBER}"
+          if (isUnix()) {
+            def dockerOK = sh(script: 'docker --version >/dev/null 2>&1', returnStatus: true) == 0
+            if (!dockerOK) { echo 'Docker not available; skipping.'; return }
+            sh """
+              set -euxo pipefail
+              docker build -t ${img} .
+              docker ps -q --filter 'publish=3000' | xargs -r docker stop || true
+              docker run -d --rm -p 3000:3000 --name mini-exam-${BUILD_NUMBER} ${img}
+              sleep 2
+              curl -s http://localhost:3000/health > health.json || true
+              echo "HEALTH (Docker): $(cat health.json || true)"
+              grep -q '"status":"UP"' health.json
+            """
+          } else {
+            def dockerOK = bat(script: 'docker --version', returnStatus: true) == 0
+            if (!dockerOK) { echo 'Docker not available; skipping.'; return }
+            bat """
+              docker build -t ${img} .
+              for /f "tokens=*" %%i in ('docker ps -q --filter "publish=3000"') do docker stop %%i
+              docker run -d --rm -p 3000:3000 --name mini-exam-%BUILD_NUMBER% ${img}
+              powershell -NoProfile -Command "Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '' | Set-Content -Encoding ascii health.json }"
+              powershell -NoProfile -Command "$c = Get-Content -Raw health.json | ConvertFrom-Json; if ($c.status -eq 'UP') { exit 0 } else { Write-Host 'HEALTH BAD:'; Write-Host ($c | ConvertTo-Json -Compress); exit 1 }"
+            """
+          }
+        }
+      }
+      post {
+        always {
+          script {
+            if (isUnix()) {
+              sh 'docker ps -q --filter "name=mini-exam-" | xargs -r docker stop || true'
+            } else {
+              bat 'for /f "tokens=*" %i in (\'docker ps -q --filter "name=mini-exam-"\') do docker stop %i'
+            }
+          }
+          archiveArtifacts artifacts: 'health.json', allowEmptyArchive: true
+        }
+      }
+    }
+
+    // SonarCloud via npx sonar-scanner (no Jenkins plugin required)
+    stage('Sonar (quality)') {
+      steps {
+        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+          script {
+            if (isUnix()) {
+              sh '''
+                npx --yes sonar-scanner \
+                  -Dsonar.host.url=https://sonarcloud.io \
+                  -Dsonar.login=$SONAR_TOKEN
+              '''
+            } else {
+              bat '''
+                npx --yes sonar-scanner ^
+                  -Dsonar.host.url=https://sonarcloud.io ^
+                  -Dsonar.login=%SONAR_TOKEN%
+              '''
+            }
+          }
+        }
+      }
+    }
+
     stage('Release (approval)') {
-      when { branch 'main' } // optional: only release from main
+      when { branch 'main' }
       steps {
         timeout(time: 10, unit: 'MINUTES') {
           input message: 'Promote the current artifact to PRODUCTION?', ok: 'Release'
@@ -136,7 +228,6 @@ pipeline {
       }
     }
 
-    // --- Monitoring (smoke) ---
     stage('Monitoring (smoke)') {
       steps {
         script {
@@ -152,7 +243,7 @@ pipeline {
               done
             '''
           } else {
-        bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\monitor.ps1'
+            bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\monitor.ps1'
           }
         }
       }
