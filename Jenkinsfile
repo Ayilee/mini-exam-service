@@ -152,7 +152,7 @@ pipeline {
               done
             '''
           } else {
-            bat 'powershell -NoProfile -Command "Remove-Item -ErrorAction SilentlyContinue monitor.log; for ($i=1; $i -le 4; $i++) { $ts=(Get-Date).ToUniversalTime().ToString(''yyyy-MM-ddTHH:mm:ssZ''); try { $resp=Invoke-WebRequest -UseBasicParsing http://localhost:3000/health; $code=$resp.StatusCode.value__; $body=$resp.Content } catch { $code=0; $body=\\"\\" }; Add-Content -Encoding ascii monitor.log \\"$ts status:$code body:$body\\"; Start-Sleep -Seconds 30 }"'
+        bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\monitor.ps1'
           }
         }
       }
