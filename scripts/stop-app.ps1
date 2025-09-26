@@ -1,9 +1,10 @@
+# Stops the app if app.pid exists; then best-effort kill remaining node
 $ErrorActionPreference = 'SilentlyContinue'
-
 if (Test-Path app.pid) {
   Get-Content app.pid | ForEach-Object {
     try { Stop-Process -Id $_ -Force } catch {}
   }
+  Remove-Item app.pid -Force
 }
-Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name node | Stop-Process -Force
 exit 0
