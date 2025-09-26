@@ -32,10 +32,13 @@ pipeline {
             sh 'mkdir -p reports/junit'
             sh 'JEST_JUNIT_OUTPUT=reports/junit/junit.xml npm test -- --coverage --reporters=default --reporters=jest-junit'
           } else {
-            bat 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force reports\\junit | Out-Null"'
-            withEnv(['JEST_JUNIT_OUTPUT=reports\\junit\\junit.xml']) {
-              bat 'npm test -- --coverage --reporters=default --reporters=jest-junit'
-            }
+            bat '''
+              if not exist reports\\junit mkdir reports\\junit
+              set JEST_JUNIT_OUTPUT=reports\\junit\\junit.xml
+              npm test -- --coverage --reporters=default --reporters=jest-junit
+              echo ===== Contents of reports\\junit =====
+              dir reports\\junit
+            '''
           }
         }
       }
@@ -46,12 +49,11 @@ pipeline {
         script {
           if (isUnix()) {
             sh 'mkdir -p reports/eslint'
-            // write Checkstyle XML for Jenkins & keep console output
+            # Checkstyle XML for Jenkins + console output
             sh 'npx eslint . -f checkstyle -o reports/eslint/checkstyle.xml || true'
             sh 'npx eslint .'
           } else {
             bat 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force reports\\eslint | Out-Null"'
-            // ensure formatter exists; harmless if already installed
             bat 'npm i -D eslint-formatter-checkstyle'
             bat 'npx eslint . -f checkstyle -o reports\\eslint\\checkstyle.xml || exit /b 0'
             bat 'npx eslint .'
@@ -92,15 +94,23 @@ pipeline {
           script {
             if (isUnix()) {
               sh '''
+                mkdir -p reports
                 npm i -g snyk
                 snyk auth "$SNYK_TOKEN" || true
+                # human-readable output
                 snyk test --severity-threshold=high || true
+                # JSON report for evidence
+                snyk test --json --severity-threshold=high > reports/snyk.json || true
               '''
             } else {
               bat '''
+                if not exist reports mkdir reports
                 call npm i -g snyk
                 call snyk auth %SNYK_TOKEN% || exit /b 0
+                rem human-readable
                 call snyk test --severity-threshold=high || exit /b 0
+                rem JSON report
+                call snyk test --json --severity-threshold=high > reports\\snyk.json || exit /b 0
               '''
             }
           }
@@ -108,7 +118,6 @@ pipeline {
       }
     }
 
-    // Non-Docker, host test deploy (Windows uses scripts/*.ps1 you already added)
     stage('Deploy (Test)') {
       steps {
         script {
@@ -143,7 +152,6 @@ pipeline {
       }
     }
 
-    // Optional: Dockerized test deploy (auto-skips if Docker not installed)
     stage('Deploy (Docker Test)') {
       steps {
         script {
@@ -180,7 +188,7 @@ pipeline {
             if (isUnix()) {
               sh 'docker ps -q --filter "name=mini-exam-" | xargs -r docker stop || true'
             } else {
-              bat 'for /f "tokens=*" %i in (\'docker ps -q --filter "name=mini-exam-"\') do docker stop %i'
+              bat 'for /f "tokens=*" %%i in (\'docker ps -q --filter "name=mini-exam-"\') do docker stop %%i'
             }
           }
           archiveArtifacts artifacts: 'health.json', allowEmptyArchive: true
@@ -188,7 +196,6 @@ pipeline {
       }
     }
 
-    // SonarCloud via npx sonar-scanner (no Jenkins plugin required)
     stage('Sonar (quality)') {
       steps {
         withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
@@ -257,7 +264,8 @@ pipeline {
 
   post {
     always {
-      junit testResults: 'reports/junit/junit.xml', allowEmptyResults: true
+      // Pick up any JUnit XML we produced
+      junit testResults: 'reports/junit/*.xml', allowEmptyResults: true
       archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
       cleanWs(deleteDirs: true, notFailBuild: true)
     }
