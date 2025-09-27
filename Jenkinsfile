@@ -173,16 +173,17 @@ pipeline {
               grep -q '"status":"UP"' health.json
             """
           } else {
-            def dockerOK = bat(script: 'docker --version', returnStatus: true) == 0
-            if (!dockerOK) { echo 'Docker not available; skipping.'; return }
-            bat """
-              docker build -t ${img} .
-              for /f "tokens=*" %%i in ('docker ps -q --filter "publish=3000"') do docker stop %%i
-              docker run -d --rm -p 3000:3000 --name mini-exam-%BUILD_NUMBER% ${img}
-              powershell -NoProfile -Command "Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '' | Set-Content -Encoding ascii health.json }"
-              powershell -NoProfile -Command "$c = Get-Content -Raw health.json | ConvertFrom-Json; if ($c.status -eq 'UP') { exit 0 } else { Write-Host 'HEALTH BAD:'; Write-Host ($c | ConvertTo-Json -Compress); exit 1 }"
-            """
-          }
+  def dockerOK = bat(script: 'docker --version', returnStatus: true) == 0
+  if (!dockerOK) { echo 'Docker not available; skipping.'; return }
+  bat """
+    docker build -t ${img} .
+    for /f "tokens=*" %%i in ('docker ps -q --filter "publish=3000"') do docker stop %%i
+    docker run -d --rm -p 3000:3000 --name mini-exam-${env.BUILD_NUMBER} ${img}
+    powershell -NoProfile -Command "Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { '' | Set-Content -Encoding ascii health.json }"
+    powershell -NoProfile -Command "\$c = Get-Content -Raw health.json | ConvertFrom-Json; if (\$c.status -eq 'UP') { exit 0 } else { Write-Host 'HEALTH BAD:'; Write-Host (\$c | ConvertTo-Json -Compress); exit 1 }"
+  """
+}
+
         }
       }
       post {
