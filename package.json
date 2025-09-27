@@ -3,12 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-
-  "jest-junit": {
-    "outputDirectory": "reports/junit",
-    "outputName": "junit.xml"
-  },
-
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
@@ -16,11 +10,9 @@
     "lint": "eslint .",
     "prepare": "echo no-prepare-step"
   },
-
   "dependencies": {
     "express": "^4.21.2"
   },
-
   "devDependencies": {
     "eslint": "^9.36.0",
     "eslint-formatter-checkstyle": "^8.40.0",
@@ -29,8 +21,15 @@
     "jest-junit": "^16.0.0",
     "supertest": "^7.0.0"
   },
-
   "jest": {
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "reporters": [
+      "default",
+      "jest-junit"
+    ]
+  },
+  "jest-junit": {
+    "outputDirectory": "reports/junit",
+    "outputName": "junit.xml"
   }
 }

@@ -26,43 +26,37 @@ pipeline {
     }
 
     stage('Test') {
-  steps {
-    script {
-      if (isUnix()) {
-        sh '''
-          set -e
-          mkdir -p reports/junit
-          # Force reporter output path
-          JEST_JUNIT_OUTPUT=reports/junit/junit.xml \
-          npm test -- --coverage --reporters=default --reporters=jest-junit
-          # Fallback if reporter wrote to ./junit.xml
-          [ -f junit.xml ] && mv -f junit.xml reports/junit/junit.xml || true
-          echo "===== reports/junit ====="
-          ls -l reports/junit || true
-        '''
-      } else {
-        bat '''
-          if not exist reports\\junit mkdir reports\\junit
-          rem Force reporter output path in the same shell
-          set "JEST_JUNIT_OUTPUT=reports\\junit\\junit.xml"
-          npm test -- --coverage --reporters=default --reporters=jest-junit
-          rem Fallback if reporter wrote to .\\junit.xml
-          if exist junit.xml move /Y junit.xml reports\\junit\\junit.xml
-          echo ===== Contents of reports\\junit =====
-          dir reports\\junit
-        '''
+      steps {
+        script {
+          if (isUnix()) {
+            sh '''
+              set -e
+              mkdir -p reports/junit
+              JEST_JUNIT_OUTPUT=reports/junit/junit.xml \
+              npm test -- --coverage --reporters=default --reporters=jest-junit
+              [ -f junit.xml ] && mv -f junit.xml reports/junit/junit.xml || true
+              echo "===== reports/junit ====="
+              ls -l reports/junit || true
+            '''
+          } else {
+            bat '''
+              if not exist reports\\junit mkdir reports\\junit
+              set "JEST_JUNIT_OUTPUT=reports\\junit\\junit.xml"
+              npm test -- --coverage --reporters=default --reporters=jest-junit
+              if exist junit.xml move /Y junit.xml reports\\junit\\junit.xml
+              echo ===== Contents of reports\\junit =====
+              dir reports\\junit
+            '''
+          }
+        }
       }
     }
-  }
-}
-
 
     stage('Code Quality (ESLint)') {
       steps {
         script {
           if (isUnix()) {
             sh 'mkdir -p reports/eslint'
-            # Checkstyle XML for Jenkins + console output
             sh 'npx eslint . -f checkstyle -o reports/eslint/checkstyle.xml || true'
             sh 'npx eslint .'
           } else {
@@ -110,9 +104,7 @@ pipeline {
                 mkdir -p reports
                 npm i -g snyk
                 snyk auth "$SNYK_TOKEN" || true
-                # human-readable output
                 snyk test --severity-threshold=high || true
-                # JSON report for evidence
                 snyk test --json --severity-threshold=high > reports/snyk.json || true
               '''
             } else {
@@ -120,9 +112,7 @@ pipeline {
                 if not exist reports mkdir reports
                 call npm i -g snyk
                 call snyk auth %SNYK_TOKEN% || exit /b 0
-                rem human-readable
                 call snyk test --severity-threshold=high || exit /b 0
-                rem JSON report
                 call snyk test --json --severity-threshold=high > reports\\snyk.json || exit /b 0
               '''
             }
@@ -277,7 +267,6 @@ pipeline {
 
   post {
     always {
-      // Pick up any JUnit XML we produced
       junit testResults: 'reports/junit/*.xml', allowEmptyResults: true
       archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
       cleanWs(deleteDirs: true, notFailBuild: true)
