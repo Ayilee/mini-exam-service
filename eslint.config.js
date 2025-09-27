@@ -4,16 +4,14 @@ import globals from 'globals'
 export default [
   {
     files: ['**/*.js'],
-    ignores: ['node_modules/**', 'coverage/**'],
+    ignores: ['node_modules/**', 'coverage/**', 'reports/**'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
-      globals: {
-        ...globals.node, 
-      }
+      globals: { ...globals.node }
     },
     rules: {
-      'no-unused-vars': ['error', { 'argsIgnorePattern': '^_' }],
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       'no-undef': 'error',
       'semi': ['error', 'never'],
       'quotes': ['error', 'single']
@@ -24,7 +22,7 @@ export default [
     languageOptions: {
       globals: {
         ...globals.node,
-        ...globals.jest 
+        ...globals.jest
       }
     }
   }

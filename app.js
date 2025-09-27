@@ -1,17 +1,14 @@
+//
 import express from 'express'
-
 
 const app = express()
 
-
-app.get('/api/hello', (req, res) => {
-res.json({ message: 'hello' })
+app.get('/api/hello', (_req, res) => {
+  res.json({ message: 'hello' })
 })
 
-
-app.get('/health', (req, res) => {
-res.json({ status: 'UP' })
+app.get('/health', (_req, res) => {
+  res.json({ status: 'UP' })
 })
-
 
 export default app

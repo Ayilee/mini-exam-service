@@ -1,13 +1,13 @@
 pipeline {
   agent any
+
   options {
     timestamps()
     skipDefaultCheckout(true)
   }
 
   environment {
-    NODEJS = 'NodeJS_20'           
-    SNYK_ORG = 'ayilee'
+    NODEJS = 'NodeJS_20'   // Jenkins NodeJS tool name
   }
 
   stages {
@@ -43,9 +43,7 @@ pipeline {
         bat 'set "JEST_JUNIT_OUTPUT=reports\\junit\\junit.xml" && npm test -- --coverage --reporters=default --reporters=jest-junit'
       }
       post {
-        always {
-          junit 'reports/junit/*.xml'
-        }
+        always { junit 'reports/junit/*.xml' }
       }
     }
 
@@ -54,8 +52,8 @@ pipeline {
       steps {
         bat 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force reports\\eslint | Out-Null"'
         bat 'npm i -D eslint-formatter-checkstyle'
-        bat 'npx eslint . -f checkstyle -o reports\\eslint\\checkstyle.xml || exit /b 0'
-        bat 'npx eslint . || exit /b 0'
+        bat 'npx eslint . -f checkstyle -o reports\\eslint\\checkstyle.xml --ignore-pattern coverage || exit /b 0'
+        bat 'npx eslint . --ignore-pattern coverage || exit /b 0'
       }
     }
 
@@ -71,17 +69,8 @@ pipeline {
     }
 
     stage('Security (Snyk)') {
-  steps {
-    withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
-      script {
-        if (isUnix()) {
-          sh '''
-            mkdir -p reports
-            npx --yes snyk@latest auth "$SNYK_TOKEN" || true
-            npx --yes snyk@latest test --severity-threshold=high || true
-            npx --yes snyk@latest test --json --severity-threshold=high > reports/snyk.json || true
-          '''
-        } else {
+      steps {
+        withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
           bat '''
             if not exist reports mkdir reports
             npx --yes snyk@latest auth %SNYK_TOKEN% || exit /b 0
@@ -91,8 +80,6 @@ pipeline {
         }
       }
     }
-  }
-}
 
     stage('Deploy (Test)') {
       steps {
@@ -109,45 +96,38 @@ pipeline {
 
     stage('Deploy (Docker Test)') {
       when {
-        expression {
-          return (bat(returnStatus: true, script: 'where docker >NUL 2>&1') == 0)
-        }
+        expression { bat(returnStatus: true, script: 'where docker >NUL 2>&1') == 0 }
       }
       environment {
-        IMG = "mini-exam:${env.BUILD_NUMBER}"
+        IMG = "mini-exam-service:%BUILD_NUMBER%"
       }
       steps {
-        echo "Docker available; running container test as ${IMG}"
-        bat 'docker version'
-        bat 'docker build -t mini-exam:%BUILD_NUMBER% -f dockerfile .'
-        bat 'docker run --rm -d -p 8080:8080 --name mini_exam mini-exam:%BUILD_NUMBER%'
-        bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\gate-health.ps1'
+        echo "Docker available; running container test as ${env.IMG}"
+        bat 'docker build -t %IMG% -f dockerfile .'
+        bat 'for /f "tokens=*" %%i in (\'docker ps -q --filter "publish=3000"\') do docker stop %%i'
+        bat 'docker run -d --rm -p 3000:3000 --name mini-exam-%BUILD_NUMBER% %IMG%'
+        bat 'powershell -NoProfile -Command "Start-Sleep -Seconds 2; try { (Invoke-WebRequest -UseBasicParsing http://localhost:3000/health).Content | Set-Content -Encoding ascii health.json } catch { \'\'}"'
+        bat 'powershell -NoProfile -Command "$c = Get-Content -Raw health.json | ConvertFrom-Json; if ($c.status -eq \'UP\') { exit 0 } else { exit 1 }"'
       }
       post {
         always {
-          
-          script {
-            bat(returnStatus: true, script: 'docker ps -a --format "{{.Names}}" | findstr /I mini_exam >NUL && docker rm -f mini_exam || ver >NUL')
-            bat(returnStatus: true, script: 'docker image inspect mini-exam:%BUILD_NUMBER% >NUL 2>&1 && docker rmi -f mini-exam:%BUILD_NUMBER% || ver >NUL')
-          }
+          bat 'for /f "tokens=*" %%i in (\'docker ps -q --filter "name=mini-exam-"\') do docker stop %%i'
+          archiveArtifacts artifacts: 'health.json', allowEmptyArchive: true
         }
       }
     }
 
-   stage('Sonar (quality)') {
-  steps {
-    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-      // We already produced coverage in the Test stage.
-      // This will read sonar-project.properties from repo root.
-      bat '''
-        npx --yes sonar-scanner ^
-          -Dsonar.host.url=https://sonarcloud.io ^
-          -Dsonar.login=%SONAR_TOKEN%
-      '''
+    stage('Sonar (quality)') {
+      steps {
+        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+          bat '''
+            npx --yes sonar-scanner ^
+              -Dsonar.host.url=https://sonarcloud.io ^
+              -Dsonar.token=%SONAR_TOKEN%
+          '''
+        }
+      }
     }
-  }
-}
-
 
     stage('Release (approval)') {
       steps {
@@ -157,9 +137,7 @@ pipeline {
     }
 
     stage('Monitoring (smoke)') {
-      steps {
-        echo 'Run smoke checks against the deployed target'
-      }
+      steps { echo 'Run smoke checks against the deployed target' }
     }
   }
 
