@@ -1,4 +1,4 @@
-// 
+// eslint.config.js — ESLint v9 flat config
 import globals from 'globals'
 
 export default [

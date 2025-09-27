@@ -1,4 +1,4 @@
-# 
+# Reads health.json and exits 0 only if status == "UP"
 $ErrorActionPreference = 'Stop'
 
 if (-not (Test-Path -LiteralPath 'health.json')) {
