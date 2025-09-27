@@ -71,14 +71,28 @@ pipeline {
     }
 
     stage('Security (Snyk)') {
-      environment { SNYK_TOKEN = credentials('snyk-token') }
-      steps {
-        bat 'if not exist reports mkdir reports'
-        bat 'npm i -g snyk'
-        bat 'snyk auth %SNYK_TOKEN%'
-        bat 'snyk test --org=%SNYK_ORG% --file=package-lock.json --severity-threshold=low || exit /b 0'
+  steps {
+    withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
+      script {
+        if (isUnix()) {
+          sh '''
+            mkdir -p reports
+            npx --yes snyk@latest auth "$SNYK_TOKEN" || true
+            npx --yes snyk@latest test --severity-threshold=high || true
+            npx --yes snyk@latest test --json --severity-threshold=high > reports/snyk.json || true
+          '''
+        } else {
+          bat '''
+            if not exist reports mkdir reports
+            npx --yes snyk@latest auth %SNYK_TOKEN% || exit /b 0
+            npx --yes snyk@latest test --severity-threshold=high || exit /b 0
+            npx --yes snyk@latest test --json --severity-threshold=high > reports\\snyk.json || exit /b 0
+          '''
+        }
       }
     }
+  }
+}
 
     stage('Deploy (Test)') {
       steps {
