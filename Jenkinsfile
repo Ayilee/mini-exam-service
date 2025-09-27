@@ -134,12 +134,20 @@ pipeline {
       }
     }
 
-    stage('Sonar (quality)') {
-      when { expression { return env.SONAR_HOST_URL != null } }
-      steps {
-        echo 'Run your Sonar scanner here (guarded if not configured).'
-      }
+   stage('Sonar (quality)') {
+  steps {
+    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+      // We already produced coverage in the Test stage.
+      // This will read sonar-project.properties from repo root.
+      bat '''
+        npx --yes sonar-scanner ^
+          -Dsonar.host.url=https://sonarcloud.io ^
+          -Dsonar.login=%SONAR_TOKEN%
+      '''
     }
+  }
+}
+
 
     stage('Release (approval)') {
       steps {
