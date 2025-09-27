@@ -163,15 +163,16 @@ pipeline {
             def dockerOK = sh(script: 'docker --version >/dev/null 2>&1', returnStatus: true) == 0
             if (!dockerOK) { echo 'Docker not available; skipping.'; return }
             sh """
-              set -euxo pipefail
-              docker build -t ${img} .
-              docker ps -q --filter 'publish=3000' | xargs -r docker stop || true
-              docker run -d --rm -p 3000:3000 --name mini-exam-${BUILD_NUMBER} ${img}
-              sleep 2
-              curl -s http://localhost:3000/health > health.json || true
-              echo "HEALTH (Docker): $(cat health.json || true)"
-              grep -q '"status":"UP"' health.json
-            """
+  set -euxo pipefail
+  docker build -t ${img} .
+  docker ps -q --filter 'publish=3000' | xargs -r docker stop || true
+  docker run -d --rm -p 3000:3000 --name mini-exam-${env.BUILD_NUMBER} ${img}
+  sleep 2
+  curl -s http://localhost:3000/health > health.json || true
+  echo "HEALTH (Docker): $(cat health.json || true)"
+  grep -q '"status":"UP"' health.json
+"""
+
           } else {
   def dockerOK = bat(script: 'docker --version', returnStatus: true) == 0
   if (!dockerOK) { echo 'Docker not available; skipping.'; return }
