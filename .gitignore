@@ -1,0 +1,7 @@
+﻿node_modules
+coverage
+reports
+health.json
+app.pid
+mini-exam-service.zip
+.env
