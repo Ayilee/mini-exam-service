@@ -1,4 +1,4 @@
-// eslint.config.js — ESLint v9 flat config
+// 
 import globals from 'globals'
 
 export default [
@@ -9,7 +9,7 @@ export default [
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: {
-        ...globals.node, // allow Node globals (process, __dirname, etc.)
+        ...globals.node, 
       }
     },
     rules: {
@@ -24,7 +24,7 @@ export default [
     languageOptions: {
       globals: {
         ...globals.node,
-        ...globals.jest // allow describe/it/expect
+        ...globals.jest 
       }
     }
   }
