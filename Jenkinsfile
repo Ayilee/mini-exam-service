@@ -7,7 +7,7 @@ pipeline {
   }
 
   environment {
-    NODEJS = 'NodeJS_20'   // Jenkins NodeJS tool name
+    NODEJS = 'NodeJS_20'
   }
 
   stages {

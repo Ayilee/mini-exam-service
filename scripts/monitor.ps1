@@ -1,17 +1,19 @@
-$ErrorActionPreference = 'SilentlyContinue'
-
-Remove-Item -Path monitor.log -ErrorAction SilentlyContinue
-
-for ($i = 1; $i -le 4; $i++) {
-  $ts = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-  try {
-    $resp = Invoke-WebRequest -UseBasicParsing http://localhost:3000/health
-    $code = [int]$resp.StatusCode
-    $body = $resp.Content
-  } catch {
-    $code = 0
-    $body = ''
-  }
-  Add-Content -Encoding ascii -Path monitor.log -Value "$ts status:$code body:$body"
-  Start-Sleep -Seconds 30
+$ErrorActionPreference = 'Stop'
+if (-not (Test-Path -LiteralPath 'health.json')) {
+  Write-Host 'health.json not found'
+  exit 1
+}
+try {
+  $c = Get-Content -Raw health.json | ConvertFrom-Json
+} catch {
+  Write-Host 'health.json is not valid JSON'
+  exit 1
+}
+if ($c.status -eq 'UP') {
+  Write-Host 'HEALTH OK: UP'
+  exit 0
+} else {
+  Write-Host 'HEALTH BAD:'
+  Write-Host ($c | ConvertTo-Json -Compress)
+  exit 1
 }

@@ -1,4 +1,3 @@
-# Stops the app if app.pid exists; then best-effort kill remaining node
 $ErrorActionPreference = 'SilentlyContinue'
 if (Test-Path app.pid) {
   Get-Content app.pid | ForEach-Object {
